@@ -45,7 +45,7 @@ COPY backend/package.json ./backend/package.json
 COPY frontend/package.json ./frontend/package.json
 
 # Production dependencies only (no devDependencies, no build tools).
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --workspace=@drive2social/backend --omit=dev && npm cache clean --force
 
 # Compiled output from the build stage.
 COPY --from=build /app/shared/dist ./shared/dist
