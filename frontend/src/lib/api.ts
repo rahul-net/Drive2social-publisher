@@ -131,7 +131,10 @@ export const api = {
 
   // --- Connected accounts (Phase 3: Google; Phase 4: Meta) ---
   listAccounts: () => get<ConnectedAccount[]>("/api/accounts"),
-  disconnectGoogle: () => del<{ disconnected: boolean }>("/api/accounts/google"),
+  disconnectGoogle: (purpose?: "drive" | "youtube") =>
+    del<{ disconnected: boolean }>(
+      purpose ? `/api/accounts/google/${purpose}` : "/api/accounts/google",
+    ),
 
   /**
    * Google OAuth connect URL for a purpose ("drive" or "youtube" —

@@ -230,7 +230,7 @@ async function fetchAsUser(
   }
   if (res.status === 401 && !auth.refreshed) {
     auth.refreshed = true;
-    auth.accessToken = await getValidAccessToken(auth.uid, {
+    auth.accessToken = await getValidAccessToken(auth.uid, "youtube", {
       forceRefresh: true,
     });
     try {
@@ -543,7 +543,7 @@ async function runUpload(opts: YouTubeUploadOptions): Promise<void> {
   await requireYouTubeScope(opts.uid);
   const auth: AuthState = {
     uid: opts.uid,
-    accessToken: await getValidAccessToken(opts.uid),
+    accessToken: await getValidAccessToken(opts.uid, "youtube"),
     refreshed: false,
   };
 

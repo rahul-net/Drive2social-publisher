@@ -34,7 +34,7 @@ export async function getDriveVideoMeta(
   fileId: string,
 ): Promise<DriveVideoMeta> {
   const attempt = async (forceRefresh: boolean): Promise<drive_v3.Schema$File> => {
-    const token = await getValidAccessToken(uid, { forceRefresh });
+    const token = await getValidAccessToken(uid, "drive", { forceRefresh });
     const result = await makeDriveClient(token).files.get({
       fileId,
       fields: "id,name,mimeType,size",

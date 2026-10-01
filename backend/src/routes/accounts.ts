@@ -44,6 +44,14 @@ function toConnectedAccount(
   };
   if (data.accountEmail !== undefined) account.accountEmail = data.accountEmail;
   if (data.accountName !== undefined) account.accountName = data.accountName;
+  // For Google: tell the frontend which account this is (Drive vs YouTube).
+  const googlePurpose = (data as Partial<GoogleTokenDoc>).purpose;
+  if (
+    data.provider === "google" &&
+    (googlePurpose === "drive" || googlePurpose === "youtube")
+  ) {
+    account.purpose = googlePurpose;
+  }
 
   // Phase 5 (Meta): map the Facebook identity onto the display-safe
   // fields. Tokens and the raw pages' task lists stay server-side;
@@ -93,41 +101,56 @@ accountsRouter.get(
 );
 
 /**
- * DELETE /api/accounts/google — disconnect Google.
+ * DELETE /api/accounts/google/:purpose — disconnect one Google account.
  * Revokes the refresh token at Google, then deletes the local doc.
  * Disconnect always succeeds locally: a revoke failure is logged as a
  * warning but never blocks the disconnect.
+ *
+ * Also accepts DELETE /api/accounts/google?purpose=drive for old clients;
+ * with no purpose, BOTH docs are disconnected.
  */
 accountsRouter.delete(
-  "/google",
+  "/google/:purpose?",
   requireAuth,
   async (req: AuthenticatedRequest, res, next) => {
     try {
       const uid = requireUid(req);
-      const ref = getDb().doc(`connectedAccounts/${googleTokenDocId(uid)}`);
-      const snap = await ref.get();
+      const rawPurpose =
+        (req.params.purpose as string | undefined) ??
+        (req.query.purpose as string | undefined);
+      const purposes: Array<"drive" | "youtube"> =
+        rawPurpose === "drive" || rawPurpose === "youtube"
+          ? [rawPurpose]
+          : ["drive", "youtube"];
 
-      if (snap.exists) {
-        const data = snap.data() as Partial<GoogleTokenDoc>;
-        if (data.refreshToken_enc) {
-          try {
-            const refreshToken = decryptToken(data.refreshToken_enc);
-            const revoked = await revokeGoogleToken(refreshToken);
-            if (!revoked) {
+      for (const purpose of purposes) {
+        const ref = getDb().doc(
+          `connectedAccounts/${googleTokenDocId(uid, purpose)}`,
+        );
+        const snap = await ref.get();
+
+        if (snap.exists) {
+          const data = snap.data() as Partial<GoogleTokenDoc>;
+          if (data.refreshToken_enc) {
+            try {
+              const refreshToken = decryptToken(data.refreshToken_enc);
+              const revoked = await revokeGoogleToken(refreshToken);
+              if (!revoked) {
+                logger.warn(
+                  { uid, purpose },
+                  "Google token revoke returned non-OK; disconnecting locally anyway",
+                );
+              }
+            } catch (err) {
               logger.warn(
-                { uid },
-                "Google token revoke returned non-OK; disconnecting locally anyway",
+                { uid, purpose, err: err instanceof Error ? err.message : String(err) },
+                "Google token revoke failed; disconnecting locally anyway",
               );
             }
-          } catch (err) {
-            logger.warn(
-              { uid, err: err instanceof Error ? err.message : String(err) },
-              "Google token revoke failed; disconnecting locally anyway",
-            );
           }
+          await ref.delete();
+          logger.info({ uid, purpose }, "Google account disconnected");
         }
-        await ref.delete();
-        logger.info({ uid }, "Google account disconnected");
       }
 
       const body: ApiResponse<{ disconnected: boolean }> = {

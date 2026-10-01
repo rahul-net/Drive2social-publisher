@@ -211,6 +211,12 @@ export interface ConnectedAccount {
   id?: string;
   userId: string;
   provider: "google" | "meta";
+  /**
+   * For provider "google": which Google account this is — the Drive
+   * account or the YouTube account. A user may connect Drive with one
+   * Gmail and YouTube with a different one.
+   */
+  purpose?: "drive" | "youtube";
   scopes: string[];
   accountEmail?: string;
   accountName?: string;

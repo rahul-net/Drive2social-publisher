@@ -150,7 +150,7 @@ geminiRouter.post(
 
       // 2. Frame extraction (bounded sample; degrades to metadata mode).
       // Token-ownership: the user's own access token, same as Drive routes.
-      const accessToken = await getValidAccessToken(uid);
+      const accessToken = await getValidAccessToken(uid, "drive");
       // exactOptionalPropertyTypes: only set optional fields when present.
       const frameOpts: {
         accessToken: string;

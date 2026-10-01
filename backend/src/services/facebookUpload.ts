@@ -720,7 +720,7 @@ async function runUpload(opts: FacebookUploadOptions): Promise<void> {
 
   // Google access token for the Drive byte stream (401 → single
   // refresh inside getValidAccessToken).
-  const googleToken = await getValidAccessToken(opts.uid);
+  const googleToken = await getValidAccessToken(opts.uid, "drive");
 
   const now = new Date().toISOString();
   await touch({

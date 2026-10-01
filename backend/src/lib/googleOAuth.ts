@@ -21,9 +21,11 @@ import {
 // mapGoogleError, and the GOOGLE_REAUTH_REQUIRED /
 // GOOGLE_NOT_CONNECTED error types.
 //
-// Token storage: Firestore `connectedAccounts`, doc id `{uid}_google`.
-// Tokens are stored ONLY encrypted (AES-256-GCM, see tokenCrypto).
-// Plaintext tokens are never logged.
+// Token storage: Firestore `connectedAccounts`, one doc per purpose:
+// `connectedAccounts/{uid}_google_drive` and `{uid}_google_youtube`.
+// This lets the user connect Drive with one Google account and YouTube
+// with a different one. Tokens are stored ONLY encrypted (AES-256-GCM,
+// see tokenCrypto). Plaintext tokens are never logged.
 // ============================================================
 
 export const GOOGLE_OAUTH_AUTHORIZE_URL =
@@ -73,19 +75,24 @@ export function scopesForPurpose(purpose: GoogleOAuthPurpose): string[] {
   return [...PURPOSE_SCOPES[purpose]];
 }
 
-/** Doc id for a user's Google token record. */
-export function googleTokenDocId(uid: string): string {
-  return `${uid}_google`;
+/** Doc id for a user's Google token record for one purpose (drive/youtube). */
+export function googleTokenDocId(
+  uid: string,
+  purpose: GoogleOAuthPurpose,
+): string {
+  return `${uid}_google_${purpose}`;
 }
 
 /**
- * Server-side shape of `connectedAccounts/{uid}_google`.
+ * Server-side shape of `connectedAccounts/{uid}_google_{drive|youtube}`.
  * Tokens exist here ONLY in encrypted form — this interface never
  * travels to the frontend (see ConnectedAccount in shared types).
  */
 export interface GoogleTokenDoc {
   userId: string;
   provider: "google";
+  /** Which Google account this is: the Drive one or the YouTube one. */
+  purpose: GoogleOAuthPurpose;
   scopes: string[];
   accountEmail?: string;
   accountName?: string;
@@ -120,11 +127,14 @@ export class GoogleNotConnectedError extends HttpError {
   }
 }
 
-/** Raw token doc, or null when the user never connected Google. */
+/** Raw token doc for one purpose, or null when that purpose was never connected. */
 export async function getGoogleTokenDoc(
   uid: string,
+  purpose: GoogleOAuthPurpose,
 ): Promise<GoogleTokenDoc | null> {
-  const snap = await getDb().doc(`connectedAccounts/${googleTokenDocId(uid)}`).get();
+  const snap = await getDb()
+    .doc(`connectedAccounts/${googleTokenDocId(uid, purpose)}`)
+    .get();
   if (!snap.exists) return null;
   return snap.data() as GoogleTokenDoc;
 }
@@ -317,11 +327,11 @@ export async function revokeGoogleToken(token: string): Promise<boolean> {
 const inflight = new Map<string, Promise<string>>();
 
 /**
- * A valid access token for the user's Google connection.
+ * A valid access token for the user's Google connection for one purpose.
  *
- * Reads `connectedAccounts/{uid}_google`; returns the stored access token
- * when it is not expiring within 60s, otherwise refreshes via the token
- * endpoint and persists the new token + expiry.
+ * Reads `connectedAccounts/{uid}_google_{drive|youtube}`; returns the stored
+ * access token when it is not expiring within 60s, otherwise refreshes via
+ * the token endpoint and persists the new token + expiry.
  *
  * Throws GoogleNotConnectedError (never connected) or
  * GoogleReauthRequiredError (refresh rejected with invalid_grant — the
@@ -329,24 +339,27 @@ const inflight = new Map<string, Promise<string>>();
  */
 export function getValidAccessToken(
   uid: string,
+  purpose: GoogleOAuthPurpose,
   opts?: { forceRefresh?: boolean },
 ): Promise<string> {
-  const existing = inflight.get(uid);
+  const key = `${uid}:${purpose}`;
+  const existing = inflight.get(key);
   if (existing) return existing;
-  const p = loadValidAccessToken(uid, opts?.forceRefresh === true).finally(
+  const p = loadValidAccessToken(uid, purpose, opts?.forceRefresh === true).finally(
     () => {
-      if (inflight.get(uid) === p) inflight.delete(uid);
+      if (inflight.get(key) === p) inflight.delete(key);
     },
   );
-  inflight.set(uid, p);
+  inflight.set(key, p);
   return p;
 }
 
 async function loadValidAccessToken(
   uid: string,
+  purpose: GoogleOAuthPurpose,
   forceRefresh: boolean,
 ): Promise<string> {
-  const doc = await getGoogleTokenDoc(uid);
+  const doc = await getGoogleTokenDoc(uid, purpose);
   if (!doc) throw new GoogleNotConnectedError();
 
   if (!forceRefresh && doc.expiresAt - Date.now() > 60_000) {
@@ -357,7 +370,7 @@ async function loadValidAccessToken(
   const refreshToken = decryptToken(doc.refreshToken_enc);
   const refreshed = await refreshAccessToken(refreshToken);
   await getDb()
-    .doc(`connectedAccounts/${googleTokenDocId(uid)}`)
+    .doc(`connectedAccounts/${googleTokenDocId(uid, purpose)}`)
     .update({
       accessToken_enc: encryptToken(refreshed.accessToken),
       expiresAt: Date.now() + refreshed.expiresIn * 1000,
@@ -368,7 +381,9 @@ async function loadValidAccessToken(
 
 export interface UpsertGoogleTokenInput {
   uid: string;
-  /** Scopes granted in this OAuth round. Merged (union) with existing. */
+  /** Which Google account this is: the Drive one or the YouTube one. */
+  purpose: GoogleOAuthPurpose;
+  /** Scopes granted in this OAuth round. Unioned with this purpose's stored scopes. */
   scopes: string[];
   accountEmail?: string;
   accountName?: string;
@@ -381,17 +396,20 @@ export interface UpsertGoogleTokenInput {
 }
 
 /**
- * Create or update `connectedAccounts/{uid}_google`.
+ * Create or update `connectedAccounts/{uid}_google_{drive|youtube}`.
  *
- * Incremental-auth strategy (Phase 4 reuses this): scopes are UNIONED
- * with any previously granted scopes, so requesting YouTube scopes
- * later keeps the Drive grant. The refresh token is only replaced when
- * Google returns a new one; otherwise the stored one is kept.
+ * Each purpose has its OWN doc and its OWN Google account — connecting
+ * YouTube with a different Gmail never touches the Drive doc. Scopes are
+ * unioned only within the same purpose's doc (re-connect safety). The
+ * refresh token is only replaced when Google returns a new one;
+ * otherwise the stored one is kept.
  */
 export async function upsertGoogleTokenDoc(
   input: UpsertGoogleTokenInput,
 ): Promise<void> {
-  const ref = getDb().doc(`connectedAccounts/${googleTokenDocId(input.uid)}`);
+  const ref = getDb().doc(
+    `connectedAccounts/${googleTokenDocId(input.uid, input.purpose)}`,
+  );
   const snap = await ref.get();
   const prev = snap.exists ? (snap.data() as Partial<GoogleTokenDoc>) : undefined;
   const now = new Date().toISOString();
@@ -413,6 +431,7 @@ export async function upsertGoogleTokenDoc(
   const data: GoogleTokenDoc = {
     userId: input.uid,
     provider: "google",
+    purpose: input.purpose,
     scopes: Array.from(new Set([...(prev?.scopes ?? []), ...input.scopes])),
     accessToken_enc: encryptToken(input.accessToken),
     refreshToken_enc: refreshTokenEnc,
@@ -431,7 +450,7 @@ export async function upsertGoogleTokenDoc(
 
   await ref.set(data);
   logger.info(
-    { uid: input.uid, scopes: data.scopes.length },
+    { uid: input.uid, purpose: input.purpose, scopes: data.scopes.length },
     "Google account connected/updated",
   );
 }

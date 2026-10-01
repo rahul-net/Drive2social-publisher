@@ -169,7 +169,7 @@ export function networkFailure(kind: string, err: unknown): ClassifiedFailure {
  *    incremental-reconnect hint).
  */
 export async function requireYouTubeScope(uid: string): Promise<void> {
-  const doc = await getGoogleTokenDoc(uid);
+  const doc = await getGoogleTokenDoc(uid, "youtube");
   if (!doc) {
     throw new GoogleNotConnectedError(
       "No Google account is connected. Connect Google under Accounts first.",
@@ -197,7 +197,7 @@ async function youtubeGetJson(
   url: string,
   what: string,
 ): Promise<unknown> {
-  let accessToken = await getValidAccessToken(uid);
+  let accessToken = await getValidAccessToken(uid, "youtube");
   let res: Response;
   try {
     res = await fetch(url, {
@@ -210,7 +210,7 @@ async function youtubeGetJson(
 
   if (res.status === 401) {
     // One refresh, then one retry — never a loop.
-    accessToken = await getValidAccessToken(uid, { forceRefresh: true });
+    accessToken = await getValidAccessToken(uid, "youtube", { forceRefresh: true });
     try {
       res = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` },

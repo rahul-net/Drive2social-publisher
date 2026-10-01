@@ -227,6 +227,7 @@ googleAuthRouter.get("/callback", async (req, res) => {
     // exactOptionalPropertyTypes: only set optional fields when present.
     const upsertInput: UpsertGoogleTokenInput = {
       uid: stateDoc.uid,
+      purpose: stateDoc.purpose,
       scopes: stateDoc.scopes,
       accessToken: tokens.accessToken,
       expiresIn: tokens.expiresIn,

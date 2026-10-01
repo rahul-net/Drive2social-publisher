@@ -86,7 +86,7 @@ function GoogleAccountCard({ account }: { account: ConnectedAccount }) {
 
   const handleDisconnect = async () => {
     setBusy(true);
-    const res = await api.disconnectGoogle();
+    const res = await api.disconnectGoogle(account.purpose);
     setBusy(false);
     setConfirming(false);
     if (res.ok) {
@@ -97,10 +97,16 @@ function GoogleAccountCard({ account }: { account: ConnectedAccount }) {
     }
   };
 
+  const title =
+    account.purpose === "youtube"
+      ? "YouTube"
+      : account.purpose === "drive"
+        ? "Google Drive"
+        : "Google";
   return (
     <div className="card account-card">
       <div className="card-title">
-        Google · {account.accountName ?? account.accountEmail ?? "connected account"}
+        {title} · {account.accountName ?? account.accountEmail ?? "connected account"}
       </div>
       {account.accountName && account.accountEmail && (
         <div className="card-meta">{account.accountEmail}</div>
@@ -376,10 +382,10 @@ export function SettingsPage() {
     }
   };
 
-  const googleAccount =
+  const googleAccounts =
     accounts.state === "ready"
-      ? accounts.data.find((a) => a.provider === "google")
-      : undefined;
+      ? accounts.data.filter((a) => a.provider === "google")
+      : [];
   const metaAccount =
     accounts.state === "ready"
       ? accounts.data.find((a) => a.provider === "meta")
@@ -409,8 +415,13 @@ export function SettingsPage() {
         )}
         {accounts.state === "ready" && (
           <>
-            {googleAccount ? (
-              <GoogleAccountCard account={googleAccount} />
+            {googleAccounts.length > 0 ? (
+              googleAccounts.map((acc) => (
+                <GoogleAccountCard
+                  key={acc.id ?? `${acc.purpose}-${acc.accountEmail}`}
+                  account={acc}
+                />
+              ))
             ) : (
               <EmptyState
                 icon="🔗"

@@ -170,9 +170,9 @@ export function AccountsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleDisconnectGoogle = async () => {
+  const handleDisconnectGoogle = async (purpose?: "drive" | "youtube") => {
     setDisconnectBusy(true);
-    const res = await api.disconnectGoogle();
+    const res = await api.disconnectGoogle(purpose);
     setDisconnectBusy(false);
     setDisconnecting(null);
     if (res.ok) {
@@ -183,12 +183,29 @@ export function AccountsPage() {
     }
   };
 
-  const googleAccount =
+  const driveAccount =
     accounts.state === "ready"
-      ? accounts.data.find((a) => a.provider === "google")
+      ? accounts.data.find(
+          (a) => a.provider === "google" && a.purpose === "drive",
+        )
       : undefined;
+  const youtubeAccount =
+    accounts.state === "ready"
+      ? accounts.data.find(
+          (a) => a.provider === "google" && a.purpose === "youtube",
+        )
+      : undefined;
+  // Backward compat: a legacy single Google account without purpose.
+  const legacyGoogleAccount =
+    accounts.state === "ready"
+      ? accounts.data.find(
+          (a) => a.provider === "google" && a.purpose === undefined,
+        )
+      : undefined;
+  const googleAccount = driveAccount ?? youtubeAccount ?? legacyGoogleAccount;
   const hasYouTube =
-    googleAccount?.scopes.includes(YOUTUBE_UPLOAD_SCOPE) ?? false;
+    youtubeAccount?.scopes.includes(YOUTUBE_UPLOAD_SCOPE) ??
+    (googleAccount?.scopes.includes(YOUTUBE_UPLOAD_SCOPE) ?? false);
   const metaAccount =
     accounts.state === "ready"
       ? accounts.data.find((a) => a.provider === "meta")
@@ -197,35 +214,30 @@ export function AccountsPage() {
   return (
     <Layout title="Connected Accounts">
       <div className="connect-row">
-        {googleAccount ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => connectGoogle("drive")}
-            disabled={connecting}
-          >
-            {connecting ? "Opening Google…" : "Reconnect Google Drive"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => connectGoogle("drive")}
-            disabled={connecting}
-          >
-            {connecting ? "Opening Google…" : "Connect Google Drive"}
-          </button>
-        )}
-        {!hasYouTube && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => connectYouTube("youtube")}
-            disabled={connectingYouTube}
-          >
-            {connectingYouTube ? "Opening Google…" : "Connect YouTube channel"}
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => connectGoogle("drive")}
+          disabled={connecting}
+        >
+          {connecting
+            ? "Opening Google…"
+            : driveAccount
+              ? "Reconnect Google Drive"
+              : "Connect Google Drive"}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => connectYouTube("youtube")}
+          disabled={connectingYouTube}
+        >
+          {connectingYouTube
+            ? "Opening Google…"
+            : youtubeAccount
+              ? "Reconnect YouTube channel"
+              : "Connect YouTube channel"}
+        </button>
         <button
           type="button"
           className="btn btn-primary"
@@ -271,8 +283,14 @@ export function AccountsPage() {
                 className="card account-card"
               >
                 <div className="card-title">
-                  {acc.provider === "google" ? "Google" : "Meta"} ·{" "}
-                  {acc.accountName ?? acc.accountEmail ?? acc.provider}
+                  {acc.provider === "google"
+                    ? acc.purpose === "youtube"
+                      ? "YouTube"
+                      : acc.purpose === "drive"
+                        ? "Google Drive"
+                        : "Google"
+                    : "Meta"}{" "}
+                  · {acc.accountName ?? acc.accountEmail ?? acc.provider}
                 </div>
                 {acc.accountName && acc.accountEmail && (
                   <div className="card-meta">{acc.accountEmail}</div>
@@ -308,7 +326,13 @@ export function AccountsPage() {
 
       <Modal
         open={disconnecting !== null}
-        title="Disconnect Google?"
+        title={
+          disconnecting?.purpose === "youtube"
+            ? "Disconnect YouTube?"
+            : disconnecting?.purpose === "drive"
+              ? "Disconnect Google Drive?"
+              : "Disconnect Google?"
+        }
         onClose={() => setDisconnecting(null)}
       >
         <p>
@@ -316,16 +340,22 @@ export function AccountsPage() {
           <strong>
             {disconnecting?.accountEmail ?? disconnecting?.accountName ?? "your Google account"}
           </strong>{" "}
-          — Google Drive <em>and</em> YouTube share this one connection, so
-          both are disconnected — and removes the stored connection. You can
-          reconnect anytime.
+          {disconnecting?.purpose === "youtube"
+            ? "for YouTube"
+            : disconnecting?.purpose === "drive"
+              ? "for Google Drive"
+              : ""}
+          {" "}and removes the stored connection. Your other Google
+          connection (if any) is not affected. You can reconnect anytime.
         </p>
         <div className="connect-row">
           <button
             type="button"
             className="btn btn-primary"
             disabled={disconnectBusy}
-            onClick={() => disconnecting && handleDisconnectGoogle()}
+            onClick={() =>
+              disconnecting && handleDisconnectGoogle(disconnecting.purpose)
+            }
           >
             {disconnectBusy ? "Disconnecting…" : "Yes, disconnect"}
           </button>

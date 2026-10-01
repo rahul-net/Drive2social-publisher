@@ -106,7 +106,9 @@ export function DashboardPage() {
     );
   }
 
-  const google = data.accounts.find((a) => a.provider === "google");
+  const googleAccounts = data.accounts.filter((a) => a.provider === "google");
+  const driveAccount = googleAccounts.find((a) => a.purpose === "drive");
+  const youtubeAccount = googleAccounts.find((a) => a.purpose === "youtube");
   const meta = data.accounts.find((a) => a.provider === "meta");
   const published = data.history.filter((h) => h.status === "PUBLISHED").length;
   const active = data.jobs.filter(
@@ -134,12 +136,21 @@ export function DashboardPage() {
       <div className="card">
         <h3 className="card-title">Connections</h3>
         <div className="card-meta">
-          Google {google ? `— ${google.accountEmail ?? google.accountName ?? "connected"}` : "— not connected"}
+          Google Drive{" "}
+          {driveAccount
+            ? `— ${driveAccount.accountEmail ?? driveAccount.accountName ?? "connected"}`
+            : "— not connected"}
+        </div>
+        <div className="card-meta">
+          YouTube{" "}
+          {youtubeAccount
+            ? `— ${youtubeAccount.accountEmail ?? youtubeAccount.accountName ?? "connected"}`
+            : "— not connected"}
         </div>
         <div className="card-meta">
           Facebook {meta ? `— ${meta.accountName ?? "connected"}` : "— not connected"}
         </div>
-        {(!google || !meta) && (
+        {(!driveAccount || !youtubeAccount || !meta) && (
           <Link to="/accounts" className="btn btn-ghost">
             Connect accounts
           </Link>

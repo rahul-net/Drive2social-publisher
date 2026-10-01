@@ -119,7 +119,7 @@ export async function withDrive<T>(
   fn: (drive: drive_v3.Drive) => Promise<T>,
 ): Promise<T> {
   const attempt = async (forceRefresh: boolean): Promise<T> => {
-    const token = await getValidAccessToken(uid, { forceRefresh });
+    const token = await getValidAccessToken(uid, "drive", { forceRefresh });
     return fn(makeDriveClient(token));
   };
   try {
@@ -300,7 +300,7 @@ driveRouter.get("/preview/:fileId", async (req, res, next) => {
 
     // Token-ownership check: resolve the uid's own token and use it to
     // confirm the file exists and is a video they can access.
-    const accessToken = await getValidAccessToken(uid);
+    const accessToken = await getValidAccessToken(uid, "drive");
     let meta: drive_v3.Schema$File;
     try {
       const result = await makeDriveClient(accessToken).files.get({
