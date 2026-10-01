@@ -6,7 +6,7 @@
  *  - Static assets (JS/CSS/images): cache-first, then network.
  *  - API calls (/api/*): network-only — never serve stale job state.
  */
-const CACHE = "drive2social-shell-v1";
+const CACHE = "drive2social-shell-v3";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -40,12 +40,17 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
 
   // Navigations: network-first with offline shell fallback.
+  // Only successful responses are cached — never cache error pages.
+  // `cache: "reload"` bypasses the browser HTTP cache so a stale
+  // cached error page can never be served for a navigation.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      fetch(request.url, { cache: "reload" })
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put("/index.html", copy));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put("/index.html", copy));
+          }
           return res;
         })
         .catch(() => caches.match("/index.html")),

@@ -17,7 +17,7 @@ import { Layout } from "../components/Layout";
 import { EmptyState, ErrorState, Loading } from "../components/States";
 
 /** Bounded window the dashboard counts are computed from. */
-const DASHBOARD_WINDOW = 200;
+const DASHBOARD_WINDOW = 100;
 
 interface DashboardData {
   accounts: ConnectedAccount[];
