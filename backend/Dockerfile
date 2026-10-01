@@ -15,8 +15,11 @@ COPY shared/package.json ./shared/package.json
 COPY backend/package.json ./backend/package.json
 COPY frontend/package.json ./frontend/package.json
 
-# Full install (devDependencies needed to compile TypeScript).
-RUN npm ci
+# Full install including devDependencies (needed to compile TypeScript).
+# NOTE: --include=dev is explicit because some hosts (e.g. Render) set
+# NODE_ENV=production during the Docker build, which would otherwise make
+# npm omit devDependencies and the tsc build would fail.
+RUN npm ci --include=dev
 
 # Sources for the workspaces the backend image needs.
 COPY shared/ ./shared/
