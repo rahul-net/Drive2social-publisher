@@ -19,7 +19,7 @@ COPY frontend/package.json ./frontend/package.json
 # NOTE: --include=dev is explicit because some hosts (e.g. Render) set
 # NODE_ENV=production during the Docker build, which would otherwise make
 # npm omit devDependencies and the tsc build would fail.
-RUN npm ci --include=dev
+RUN npm ci --workspace=@drive2social/backend --include=dev && npm cache clean --force
 
 # Sources for the workspaces the backend image needs.
 COPY shared/ ./shared/
