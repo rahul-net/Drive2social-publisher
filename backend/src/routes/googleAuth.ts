@@ -110,6 +110,9 @@ googleAuthRouter.get(
       url.searchParams.set("scope", scopes.join(" "));
       url.searchParams.set("access_type", "offline");
       url.searchParams.set("prompt", "consent");
+      // Incremental authorization: keep previously granted scopes so the
+      // stored token accumulates Drive + YouTube grants across connects.
+      url.searchParams.set("include_granted_scopes", "true");
       url.searchParams.set("state", state);
 
       const body: ApiResponse<{ url: string }> = {
