@@ -19,7 +19,13 @@ COPY frontend/package.json ./frontend/package.json
 # NOTE: --include=dev is explicit because some hosts (e.g. Render) set
 # NODE_ENV=production during the Docker build, which would otherwise make
 # npm omit devDependencies and the tsc build would fail.
-RUN npm ci --workspace=@drive2social/backend --include=dev && npm cache clean --force
+# NOTE 2: node:20-slim ships npm 10.8.2, which silently skips
+# optionalDependencies. firebase-admin declares @google-cloud/firestore as
+# optional, but the backend needs its types to compile, so install it
+# explicitly (--no-save keeps package.json/package-lock.json untouched).
+RUN npm ci --include=dev \
+ && npm install --no-save --include=dev @google-cloud/firestore@9.3.0 \
+ && npm cache clean --force
 
 # Sources for the workspaces the backend image needs.
 COPY shared/ ./shared/
@@ -45,7 +51,11 @@ COPY backend/package.json ./backend/package.json
 COPY frontend/package.json ./frontend/package.json
 
 # Production dependencies only (no devDependencies, no build tools).
-RUN npm ci --workspace=@drive2social/backend --omit=dev && npm cache clean --force
+# @google-cloud/firestore is installed explicitly for the same reason as the
+# build stage: firebase-admin needs it at RUNTIME for Firestore operations.
+RUN npm ci --omit=dev \
+ && npm install --no-save --omit=dev @google-cloud/firestore@9.3.0 \
+ && npm cache clean --force
 
 # Compiled output from the build stage.
 COPY --from=build /app/shared/dist ./shared/dist
