@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+
+# Env files (never commit real secrets)
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.local
+.vscode/*
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Firebase
+.firebase/
+.firebaserc
+
+# Local secrets / working notes (never commit)
+hidden_files/

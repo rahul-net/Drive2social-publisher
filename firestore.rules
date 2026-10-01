@@ -1,0 +1,108 @@
+rules_version = '2';
+
+// Drive2Social Publisher — Firestore security rules (Phase 9).
+//
+// Access model:
+//   * The backend (firebase-admin) bypasses these rules and enforces
+//     ownership itself: every route uses requireAuth and binds all
+//     Firestore doc ids / queries to req.user.uid. ALL writes go
+//     through the backend API — there is no client write access to
+//     any collection, ever.
+//   * The web client talks to Firestore directly in exactly ONE
+//     place: live upload-progress via onSnapshot on `publishJobs`
+//     (frontend/src/lib/useJobsLive.ts), constrained to the signed-in
+//     user's own docs (where("userId", "==", uid)), with an
+//     HTTP-polling fallback (GET /api/jobs). Everything else
+//     (settings, history, accounts) goes through the API.
+//   * OAuth tokens, Page tokens and OAuth state are server-only and
+//     are NEVER readable from the client.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Owner check on the document's stored userId. Used for both get
+    // and list: for list queries Firestore evaluates this per
+    // document, so a doc without a userId (or with a foreign one) is
+    // never returned. The client query is further constrained with
+    // where("userId", "==", uid) (see useJobsLive.ts).
+    function isOwner() {
+      return isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    // --- Live upload queue: owner read-only from the client. ---
+    // frontend/src/lib/useJobsLive.ts depends on this read rule:
+    // it subscribes with onSnapshot + where("userId", "==", uid).
+    // All writes (enqueue, progress, completion, cancel, retry) are
+    // performed by the backend with the Admin SDK, which bypasses
+    // these rules — hence create/update/delete are denied to clients.
+    //
+    // RESIDUAL EXPOSURE (accepted, documented): job docs may carry
+    // server-only resumable-session fields (uploadSessionUri,
+    // facebookUploadSessionId) while an upload is active. They are
+    // readable here only by the job's owner — the same trust
+    // boundary as the user's own OAuth tokens — and the HTTP API
+    // still strips them from every response
+    // (backend/src/lib/sanitizeJob.ts). If those fields ever need to
+    // be hidden from the owner too, move them to a server-only
+    // subcollection (e.g. publishJobs/{jobId}/secrets/{...}) with
+    // deny-all client access.
+    match /publishJobs/{jobId} {
+      allow get, list: if isOwner();
+      allow create, update, delete: if false;
+    }
+
+    // --- Publishing history: owner read-only from the client. ---
+    // (The History page currently reads via GET /api/history; this
+    // rule keeps a direct-read path safe if the UI ever uses it.)
+    match /publishHistory/{historyId} {
+      allow get, list: if isOwner();
+      allow create, update, delete: if false;
+    }
+
+    // --- Server-only collections: no direct client access, ever. ---
+
+    // connectedAccounts/{uid}_google and {uid}_meta hold ENCRYPTED
+    // OAuth refresh tokens / Page access tokens (accessToken_enc,
+    // refreshToken_enc, pages[].pageToken_enc — AES-256-GCM, see
+    // backend/src/lib/tokenCrypto.ts). Token ownership is enforced
+    // by backend routes (requireAuth + uid-bound doc ids), never by
+    // the client.
+    match /connectedAccounts/{docId} {
+      allow read, write: if false;
+    }
+
+    // oauthStates/{state}: single-use CSRF states for the Google and
+    // Meta OAuth callbacks (10-minute TTL), consumed server-side.
+    // Client-readable would enable state fixation / account-linking
+    // attacks — never exposed.
+    match /oauthStates/{state} {
+      allow read, write: if false;
+    }
+
+    // settings/{uid}: read/written only through GET/PUT /api/settings
+    // (ownership-checked server-side; the doc id is always
+    // req.user.uid, never client input).
+    match /settings/{userId} {
+      allow read, write: if false;
+    }
+
+    // users/{uid}: server-only profile docs. The client never reads
+    // or writes user profiles (identity comes from Firebase Auth;
+    // every mutation goes through the backend API). Kept deny-all on
+    // purpose: opening client read/write here would add attack
+    // surface with zero functional benefit.
+    match /users/{userId} {
+      allow read, write: if false;
+    }
+
+    // Default deny: any collection not listed above is inaccessible
+    // to client SDKs.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

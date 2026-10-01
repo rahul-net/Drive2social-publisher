@@ -1,0 +1,21 @@
+# Never bake secrets or local state into the image.
+.env
+.env.*
+*.pem
+*.key
+
+# Build output is produced inside the image.
+dist/
+node_modules/
+
+# Not needed by the API image (frontend ships as its own static deploy).
+frontend/src/
+frontend/dist/
+frontend/public/
+
+# Repo / tooling noise.
+.git/
+.gitignore
+.vscode/
+*.md
+docs/
