@@ -53,20 +53,20 @@ export const GOOGLE_SCOPES = {
  */
 export type GoogleOAuthPurpose = "drive" | "youtube";
 
+const ALL_GOOGLE_SCOPES: readonly string[] = [
+  GOOGLE_SCOPES.openid,
+  GOOGLE_SCOPES.email,
+  GOOGLE_SCOPES.profile,
+  GOOGLE_SCOPES.driveReadonly,
+  GOOGLE_SCOPES.youtubeUpload,
+  GOOGLE_SCOPES.youtubeReadonly,
+];
+
 const PURPOSE_SCOPES: Record<GoogleOAuthPurpose, readonly string[]> = {
-  drive: [
-    GOOGLE_SCOPES.openid,
-    GOOGLE_SCOPES.email,
-    GOOGLE_SCOPES.profile,
-    GOOGLE_SCOPES.driveReadonly,
-  ],
-  youtube: [
-    GOOGLE_SCOPES.openid,
-    GOOGLE_SCOPES.email,
-    GOOGLE_SCOPES.profile,
-    GOOGLE_SCOPES.youtubeUpload,
-    GOOGLE_SCOPES.youtubeReadonly,
-  ],
+  // Both purposes request the full scope set so a single connect grants
+  // everything — no reliance on incremental auth ordering.
+  drive: ALL_GOOGLE_SCOPES,
+  youtube: ALL_GOOGLE_SCOPES,
 };
 
 export function scopesForPurpose(purpose: GoogleOAuthPurpose): string[] {
